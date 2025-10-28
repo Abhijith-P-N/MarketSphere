@@ -18,6 +18,18 @@ const authReducer = (state, action) => {
       return { ...state, error: null };
     case 'UPDATE_USER':
       return { ...state, user: { ...state.user, ...action.payload } };
+    case 'FORGOT_PASSWORD_START':
+      return { ...state, loading: true, error: null };
+    case 'FORGOT_PASSWORD_SUCCESS':
+      return { ...state, loading: false, error: null };
+    case 'FORGOT_PASSWORD_FAIL':
+      return { ...state, loading: false, error: action.payload };
+    case 'RESET_PASSWORD_START':
+      return { ...state, loading: true, error: null };
+    case 'RESET_PASSWORD_SUCCESS':
+      return { ...state, loading: false, error: null };
+    case 'RESET_PASSWORD_FAIL':
+      return { ...state, loading: false, error: action.payload };
     default:
       return state;
   }
@@ -111,6 +123,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Forgot Password Function
+  const forgotPassword = async (email) => {
+    dispatch({ type: 'FORGOT_PASSWORD_START' });
+    try {
+      const { data } = await axios.post('/api/auth/forgot-password', { email });
+      dispatch({ type: 'FORGOT_PASSWORD_SUCCESS' });
+      return { success: true, message: data.message };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to send reset email';
+      dispatch({ type: 'FORGOT_PASSWORD_FAIL', payload: message });
+      return { success: false, message };
+    }
+  };
+
+  // Reset Password Function
+  const resetPassword = async (token, password) => {
+    dispatch({ type: 'RESET_PASSWORD_START' });
+    try {
+      const { data } = await axios.post('/api/auth/reset-password', { token, password });
+      dispatch({ type: 'RESET_PASSWORD_SUCCESS' });
+      return { success: true, message: data.message };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Password reset failed';
+      dispatch({ type: 'RESET_PASSWORD_FAIL', payload: message });
+      return { success: false, message };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('marketsphereToken');
     delete axios.defaults.headers.common['Authorization'];
@@ -132,6 +172,8 @@ export const AuthProvider = ({ children }) => {
         logout,
         clearError,
         updateUser,
+        forgotPassword,
+        resetPassword,
       }}
     >
       {children}

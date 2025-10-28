@@ -26,6 +26,8 @@ import UserProfile from './pages/user/Profile';
 import OrderHistory from './pages/user/OrderHistory';
 import OrderDetails from './pages/user/OrderDetails';
 import AddressBook from './pages/user/AddressBook';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // Checkout Pages
 import Checkout from './pages/Checkout';
@@ -84,6 +86,8 @@ function App() {
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
 
                     {/* User Dashboard Routes */}
                     <Route path="/user/dashboard" element={

@@ -73,7 +73,7 @@ const wrapEmail = (title, content) => {
 };
 
 /* =======================
-  0 CREATE NEW ORDER
+   CREATE NEW ORDER
 ======================= */
 router.post('/', auth, async (req, res) => {
   try {
@@ -214,7 +214,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 /* =======================
-   GET USER ORDERS (PAGINATED)
+   GET USER ORDERS (PAGINATED)
 ======================= */
 router.get('/my-orders', auth, async (req, res) => {
   try {
@@ -222,10 +222,18 @@ router.get('/my-orders', auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    // Get sort parameters from query
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    
+    // Build sort object
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder;
+
     const total = await Order.countDocuments({ user: req.user._id });
 
     const orders = await Order.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
+      .sort(sortOptions)
       .skip(skip)
       .limit(limit);
 
@@ -242,7 +250,7 @@ router.get('/my-orders', auth, async (req, res) => {
 });
 
 /* =======================
-   GET SINGLE ORDER BY ID
+   GET SINGLE ORDER BY ID
 ======================= */
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -262,19 +270,33 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 /* =======================
-   ADMIN: GET ALL ORDERS (PAGINATED)
+   ADMIN: GET ALL ORDERS (PAGINATED & SORTED)
 ======================= */
 router.get('/', auth, admin, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
+    
+    // Get sort parameters from query
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    
+    // Build sort object
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder;
 
-    const total = await Order.countDocuments();
+    // Build filter object
+    const filter = {};
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
 
-    const orders = await Order.find({})
+    const total = await Order.countDocuments(filter);
+
+    const orders = await Order.find(filter)
       .populate('user', 'name email')
-      .sort({ createdAt: -1 })
+      .sort(sortOptions)
       .skip(skip)
       .limit(limit);
 
@@ -291,7 +313,7 @@ router.get('/', auth, admin, async (req, res) => {
 });
 
 /* =======================
-   ADMIN: GET ORDER BY ID
+   ADMIN: GET ORDER BY ID
 ======================= */
 router.get('/admin/:id', auth, admin, async (req, res) => {
   try {
@@ -305,7 +327,7 @@ router.get('/admin/:id', auth, admin, async (req, res) => {
 });
 
 /* =======================
-   ADMIN: UPDATE ORDER STATUS
+   ADMIN: UPDATE ORDER STATUS
 ======================= */
 
 // Mark order as shipped
@@ -464,4 +486,3 @@ router.put('/:id/cancel', auth, admin, async (req, res) => {
 });
 
 export default router;
-

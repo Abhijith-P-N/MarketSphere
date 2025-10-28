@@ -189,6 +189,90 @@ router.post('/google', async (req, res) => {
     res.status(500).json({ message: 'Google login failed' });
   }
 });
+/** ================================
+ *  FORGOT PASSWORD
+ *  ================================ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email });
+    
+    // Don't reveal if email exists or not for security
+    if (!user) {
+      return res.status(200).json({ 
+        message: 'If the email exists, a reset link has been sent' 
+      });
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { id: user._id }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '1h' }
+    );
+
+    // Construct reset URL
+    const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
+
+    // Send email
+    await sendEmail(
+      email,
+      'MarketSphere - Reset Your Password',
+      `Hi ${user.name},\n\nYou requested to reset your password. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this, please ignore this email.\n\n- MarketSphere Team`
+    );
+
+    res.status(200).json({ 
+      message: 'If the email exists, a reset link has been sent' 
+    });
+  } catch (error) {
+    console.error('FORGOT PASSWORD ERROR:', error);
+    res.status(500).json({ message: 'Server error while processing request' });
+  }
+});
+
+/** ================================
+ *  RESET PASSWORD
+ *  ================================ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: 'Token and password are required' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    // Update password
+    user.password = password;
+    await user.save();
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('RESET PASSWORD ERROR:', error);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({ message: 'Reset token has expired' });
+    }
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(400).json({ message: 'Invalid reset token' });
+    }
+
+    res.status(500).json({ message: 'Server error while resetting password' });
+  }
+});
 
 /** ================================
  *  GET CURRENT USER

@@ -236,7 +236,7 @@ const AdminDashboard = () => {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold text-green-600">${order.totalPrice.toFixed(2)}</p>
+                          <p className="font-semibold text-green-600">₹{order.totalPrice.toFixed(2)}</p>
                           <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </span>

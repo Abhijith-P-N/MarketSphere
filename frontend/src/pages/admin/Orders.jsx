@@ -9,23 +9,31 @@ const AdminOrders = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortConfig, setSortConfig] = useState({
+    key: 'createdAt',
+    direction: 'desc'
+  });
 
   useEffect(() => {
     fetchOrders();
-  }, [currentPage, statusFilter]);
+  }, [currentPage, statusFilter, sortConfig]);
 
   const fetchOrders = async () => {
     try {
+      setLoading(true);
       const params = new URLSearchParams({
         page: currentPage,
-        limit: '10'
+        limit: '10',
+        sortBy: sortConfig.key,
+        sortOrder: sortConfig.direction
       });
+      
       if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
 
       const { data } = await axios.get(`/api/orders?${params}`);
-      setOrders(data);
+      setOrders(data.orders);
       setTotalPages(data.totalPages);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -61,6 +69,18 @@ const AdminOrders = () => {
     } catch (error) {
       toast.error('Failed to update order status');
     }
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const getSortIndicator = (key) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'desc' ? ' ↓' : ' ↑';
   };
 
   const getStatusColor = (status) => {
@@ -125,6 +145,14 @@ const AdminOrders = () => {
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
+          
+          {/* Sort Info */}
+          <div className="ml-auto">
+            <div className="text-sm text-gray-600">
+              Sorted by: <span className="font-medium">{sortConfig.key}</span> 
+              ({sortConfig.direction === 'desc' ? 'Descending' : 'Ascending'})
+            </div>
+          </div>
         </div>
       </div>
 
@@ -134,20 +162,32 @@ const AdminOrders = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Order ID
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('_id')}
+                >
+                  Order ID{getSortIndicator('_id')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('createdAt')}
+                >
+                  Date{getSortIndicator('createdAt')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('totalPrice')}
+                >
+                  Total{getSortIndicator('totalPrice')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('status')}
+                >
+                  Status{getSortIndicator('status')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -155,7 +195,7 @@ const AdminOrders = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {orders.orders?.map((order) => (
+              {orders?.map((order) => (
                 <tr key={order._id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-forest-800">
@@ -173,7 +213,7 @@ const AdminOrders = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-semibold text-wood-600">
-                      ${order.totalPrice.toFixed(2)}
+                      ₹{order.totalPrice.toFixed(2)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -223,7 +263,7 @@ const AdminOrders = () => {
           </table>
         </div>
 
-        {(!orders.orders || orders.orders.length === 0) && (
+        {(!orders || orders.length === 0) && (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">📦</div>
             <h3 className="text-xl font-semibold text-gray-600 mb-2">No Orders Found</h3>
