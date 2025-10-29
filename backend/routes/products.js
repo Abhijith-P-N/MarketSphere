@@ -1,3 +1,4 @@
+// routes/products.js
 import express from 'express';
 import Product from '../models/Product.js';
 import Review from '../models/Review.js';
@@ -9,35 +10,83 @@ const router = express.Router();
 // Get all products with filtering and pagination
 router.get('/', async (req, res) => {
   try {
-    const { category, sort, page = 1, limit = 12, search } = req.query;
+    const { 
+      category, 
+      ecosystem, 
+      sort, 
+      page = 1, 
+      limit = 12, 
+      search, 
+      offer 
+    } = req.query;
     
     let query = {};
+    
+    // Build query filters
     if (category && category !== 'all') query.category = category;
-    if (search) query.name = { $regex: search, $options: 'i' };
+    if (ecosystem && ecosystem !== 'all') query.ecosystem = ecosystem;
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+    
+    // Filter for active offers
+    if (offer === 'active') {
+      query['offer.active'] = true;
+      query.$or = [
+        { 'offer.validUntil': { $gte: new Date() } },
+        { 'offer.validUntil': null }
+      ];
+    }
 
+    // Sort options
     let sortOptions = {};
-    if (sort === 'price_low') sortOptions.price = 1;
-    else if (sort === 'price_high') sortOptions.price = -1;
-    else if (sort === 'rating') sortOptions.ratings = -1;
-    else sortOptions.createdAt = -1;
+    switch (sort) {
+      case 'price_low':
+        sortOptions.price = 1;
+        break;
+      case 'price_high':
+        sortOptions.price = -1;
+        break;
+      case 'rating':
+        sortOptions.ratings = -1;
+        break;
+      case 'discount':
+        sortOptions['offer.discountPercentage'] = -1;
+        break;
+      case 'popular':
+        sortOptions.numOfReviews = -1;
+        break;
+      default:
+        sortOptions.createdAt = -1; // newest first
+    }
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const products = await Product.find(query)
       .populate('images', 'filename originalName mimetype size url')
       .populate('createdBy', 'name')
       .sort(sortOptions)
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(limitNum)
+      .skip(skip);
 
     const total = await Product.countDocuments(query);
 
     res.json({
       products,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
+      totalCount: total,
       total
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching products:', error);
+    res.status(500).json({ message: 'Server error while fetching products' });
   }
 });
 
@@ -53,6 +102,9 @@ router.get('/:id', async (req, res) => {
     }
     res.json(product);
   } catch (error) {
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({ message: 'Product not found' });
+    }
     res.status(500).json({ message: error.message });
   }
 });
@@ -60,26 +112,43 @@ router.get('/:id', async (req, res) => {
 // Create product (Admin only)
 router.post('/', auth, admin, async (req, res) => {
   try {
-    const { name, description, price, category, stock, images, features, tags } = req.body;
+    const { 
+      name, 
+      description, 
+      price, 
+      category, 
+      stock, 
+      images, 
+      features, 
+      tags, 
+      ecosystem,
+      offer,
+      originalPrice 
+    } = req.body;
 
-    if (!name || !description || !price || !category || !stock) {
+    // Validation
+    if (!name || !description || !price || !category || stock === undefined) {
       return res.status(400).json({ message: 'All required fields must be provided' });
     }
 
     const product = new Product({
-      name,
-      description,
+      name: name.trim(),
+      description: description.trim(),
       price: parseFloat(price),
       category,
       stock: parseInt(stock),
       images: images || [],
       features: features || [],
       tags: tags || [],
+      ecosystem: ecosystem || null,
+      offer: offer || { active: false },
+      originalPrice: originalPrice ? parseFloat(originalPrice) : null,
       createdBy: req.user._id
     });
     
     await product.save();
     
+    // Populate images for response
     await product.populate('images', 'filename originalName mimetype size url');
     
     res.status(201).json(product);
@@ -88,6 +157,7 @@ router.post('/', auth, admin, async (req, res) => {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ message: messages.join(', ') });
     }
+    console.error('Error creating product:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -95,17 +165,34 @@ router.post('/', auth, admin, async (req, res) => {
 // Update product (Admin only)
 router.put('/:id', auth, admin, async (req, res) => {
   try {
-    const { name, description, price, category, stock, images, features, tags } = req.body;
+    const { 
+      name, 
+      description, 
+      price, 
+      category, 
+      stock, 
+      images, 
+      features, 
+      tags, 
+      ecosystem,
+      offer,
+      originalPrice 
+    } = req.body;
 
     const updateData = {};
-    if (name) updateData.name = name;
-    if (description) updateData.description = description;
-    if (price) updateData.price = parseFloat(price);
-    if (category) updateData.category = category;
-    if (stock) updateData.stock = parseInt(stock);
-    if (images) updateData.images = images;
-    if (features) updateData.features = features;
-    if (tags) updateData.tags = tags;
+    if (name !== undefined) updateData.name = name.trim();
+    if (description !== undefined) updateData.description = description.trim();
+    if (price !== undefined) updateData.price = parseFloat(price);
+    if (category !== undefined) updateData.category = category;
+    if (stock !== undefined) updateData.stock = parseInt(stock);
+    if (images !== undefined) updateData.images = images;
+    if (features !== undefined) updateData.features = features;
+    if (tags !== undefined) updateData.tags = tags;
+    if (ecosystem !== undefined) updateData.ecosystem = ecosystem;
+    if (offer !== undefined) updateData.offer = offer;
+    if (originalPrice !== undefined) {
+      updateData.originalPrice = originalPrice ? parseFloat(originalPrice) : null;
+    }
 
     const product = await Product.findByIdAndUpdate(
       req.params.id,
@@ -122,6 +209,10 @@ router.put('/:id', auth, admin, async (req, res) => {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ message: messages.join(', ') });
     }
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    console.error('Error updating product:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -139,9 +230,16 @@ router.delete('/:id', auth, admin, async (req, res) => {
       await Image.deleteMany({ _id: { $in: product.images } });
     }
 
+    // Delete associated reviews
+    await Review.deleteMany({ product: req.params.id });
+
     await Product.findByIdAndDelete(req.params.id);
     res.json({ message: 'Product removed successfully' });
   } catch (error) {
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    console.error('Error deleting product:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -195,6 +293,9 @@ router.post('/:id/reviews', auth, async (req, res) => {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ message: messages.join(', ') });
     }
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({ message: 'Product not found' });
+    }
     res.status(400).json({ message: error.message });
   }
 });
@@ -207,6 +308,9 @@ router.get('/:id/reviews', async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(reviews);
   } catch (error) {
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({ message: 'Product not found' });
+    }
     res.status(500).json({ message: error.message });
   }
 });

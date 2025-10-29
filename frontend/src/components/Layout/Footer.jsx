@@ -16,7 +16,7 @@ const Footer = () => {
                 </svg>
               </div>
               <span className="text-xl font-bold font-serif text-white">
-                WildCart
+                Verdant
               </span>
             </Link>
             <p className="text-gray-300 text-sm leading-relaxed mb-6">
@@ -94,7 +94,7 @@ const Footer = () => {
                 </svg>
                 <div>
                   <p className="font-medium text-sm text-white">Visit Our Store</p>
-                  <p className="text-xs">123 Forest Avenue<br />Portland, OR 97205</p>
+                  <p className="text-xs">123 Forest Avenue<br />Kerala, OR 97205</p>
                 </div>
               </div>
               
@@ -104,7 +104,7 @@ const Footer = () => {
                 </svg>
                 <div>
                   <p className="font-medium text-sm text-white">Email Us</p>
-                  <p className="text-xs">support@wildcart.com</p>
+                  <p className="text-xs">support@Verdant.com</p>
                 </div>
               </div>
               
@@ -169,7 +169,7 @@ const Footer = () => {
         {/* Copyright */}
         <div className="mt-6 pt-4 border-t border-gray-700 text-center">
           <p className="text-gray-500 text-xs">
-            © 2024 WildCart. Crafted with care for a better planet. All rights reserved.
+            © 2025 Verdant. Crafted with care for a better planet. All rights reserved.
           </p>
         </div>
       </div>

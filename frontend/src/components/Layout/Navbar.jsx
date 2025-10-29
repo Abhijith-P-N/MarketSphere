@@ -65,7 +65,7 @@ const Navbar = () => {
                 </svg>
               </div>
               <span className="text-xl font-bold font-serif text-gray-900 group-hover:text-green-700 transition-colors">
-                WildCart
+                Verdant
               </span>
             </Link>
           </div>

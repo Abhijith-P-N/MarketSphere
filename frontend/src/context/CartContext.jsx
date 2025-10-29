@@ -99,10 +99,30 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem('marketsphereCart', JSON.stringify(state.cartItems));
   }, [state.cartItems]);
 
+  // Helper function to calculate current price based on offer
+  const calculateCurrentPrice = (product) => {
+    // Check if offer is valid
+    const isOfferValid = product.offer?.active && 
+      (!product.offer.validUntil || new Date(product.offer.validUntil) > new Date());
+    
+    if (isOfferValid && product.offer.offerPrice > 0) {
+      return product.offer.offerPrice;
+    }
+    return product.price;
+  };
+
+  // Helper function to get original price
+  const getOriginalPrice = (product) => {
+    return product.originalPrice || product.price;
+  };
+
   const addToCart = (product, qty = 1) => {
     if (qty > product.stock) {
       throw new Error(`Only ${product.stock} items available in stock`);
     }
+
+    const currentPrice = calculateCurrentPrice(product);
+    const originalPrice = getOriginalPrice(product);
 
     dispatch({
       type: 'ADD_TO_CART',
@@ -110,9 +130,12 @@ export const CartProvider = ({ children }) => {
         product: product._id,
         name: product.name,
         image: product.images?.[0] ? `/api/images/${product.images[0]._id || product.images[0]}` : '/api/placeholder/300/300',
-        price: product.price,
+        price: product.price, // Base price
+        originalPrice: originalPrice, // Original price for display
+        cartPrice: currentPrice, // Actual price to charge (with offer if applicable)
         qty,
-        countInStock: product.stock
+        countInStock: product.stock,
+        offer: product.offer ? { ...product.offer } : null // Store offer data
       }
     });
   };
@@ -136,8 +159,12 @@ export const CartProvider = ({ children }) => {
     dispatch({ type: 'CLEAR_CART' });
   };
 
+  // FIXED: Use cartPrice instead of price for calculations
   const getCartTotal = () => {
-    return state.cartItems.reduce((total, item) => total + item.price * item.qty, 0);
+    return state.cartItems.reduce((total, item) => {
+      const itemPrice = item.cartPrice || item.price;
+      return total + (itemPrice * item.qty);
+    }, 0);
   };
 
   const getCartItemsCount = () => {

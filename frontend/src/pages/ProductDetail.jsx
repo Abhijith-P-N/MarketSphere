@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
-import './ProductDetail.css'; // Import the CSS file
+import './ProductDetail.css';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -91,6 +91,41 @@ const ProductDetail = () => {
     return product.images.map(image => getImageUrl(image));
   };
 
+  // Check if product has valid offer
+  const hasValidOffer = (product) => {
+    if (!product.offer?.active) return false;
+    
+    if (product.offer.validUntil) {
+      return new Date(product.offer.validUntil) > new Date();
+    }
+    
+    return true;
+  };
+
+  // Get current price (offer price if valid, else regular price)
+  const getCurrentPrice = (product) => {
+    return hasValidOffer(product) && product.offer.offerPrice 
+      ? product.offer.offerPrice 
+      : product.price;
+  };
+
+  // Get original price for display
+  const getOriginalPrice = (product) => {
+    return product.originalPrice || product.price;
+  };
+
+  // Calculate savings amount
+  const getSavingsAmount = (product) => {
+    if (!hasValidOffer(product)) return 0;
+    return getOriginalPrice(product) - getCurrentPrice(product);
+  };
+
+  // Get discount percentage
+  const getDiscountPercentage = (product) => {
+    if (!hasValidOffer(product)) return 0;
+    return product.offer.discountPercentage;
+  };
+
   const handleAddToCart = () => {
     if (!product) return;
     
@@ -100,7 +135,13 @@ const ProductDetail = () => {
     }
     
     try {
-      addToCart(product, quantity);
+      // Create cart item with current price
+      const cartItem = {
+        ...product,
+        cartPrice: getCurrentPrice(product) // Use current price (could be offer price)
+      };
+      
+      addToCart(cartItem, quantity);
       toast.success('Product added to cart!');
     } catch (error) {
       toast.error(error.message);
@@ -163,6 +204,11 @@ const ProductDetail = () => {
   }
 
   const imageUrls = getImageUrls();
+  const hasOffer = hasValidOffer(product);
+  const currentPrice = getCurrentPrice(product);
+  const originalPrice = getOriginalPrice(product);
+  const savingsAmount = getSavingsAmount(product);
+  const discountPercentage = getDiscountPercentage(product);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -188,7 +234,15 @@ const ProductDetail = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-12">
         {/* Product Images */}
         <div>
-          <div className="bg-white rounded-lg shadow-md p-4 mb-4 border border-green-100">
+          <div className="bg-white rounded-lg shadow-md p-4 mb-4 border border-green-100 relative">
+            {/* Offer Badge */}
+            {hasOffer && (
+              <div className="absolute top-4 left-4 z-10">
+                <span className="bg-red-500 text-white px-3 py-2 rounded-full text-sm font-bold shadow-lg">
+                  {discountPercentage}% OFF
+                </span>
+              </div>
+            )}
             <img
               src={imageUrls[activeImage]}
               alt={product.name}
@@ -245,7 +299,44 @@ const ProductDetail = () => {
             </span>
           </div>
 
-          <p className="text-3xl font-bold text-green-700 mb-6">₹{product.price}</p>
+          {/* Price Display */}
+          <div className="mb-4">
+            <div className="flex items-center space-x-3 mb-2">
+              <span className="text-3xl font-bold text-green-700">
+                ₹{currentPrice}
+              </span>
+              {hasOffer && (
+                <span className="text-xl text-gray-500 line-through">
+                  ₹{originalPrice}
+                </span>
+              )}
+            </div>
+            
+            {hasOffer && (
+              <div className="flex items-center space-x-4">
+                <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                  {discountPercentage}% OFF
+                </span>
+                <span className="text-green-600 font-semibold">
+                  You save ₹{savingsAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+            
+            {/* Offer Name */}
+            {hasOffer && product.offer.offerName && (
+              <p className="text-sm text-red-600 font-medium mt-2">
+                🎁 {product.offer.offerName}
+              </p>
+            )}
+            
+            {/* Offer Validity */}
+            {hasOffer && product.offer.validUntil && (
+              <p className="text-xs text-gray-500 mt-1">
+                Offer valid until: {new Date(product.offer.validUntil).toLocaleDateString()}
+              </p>
+            )}
+          </div>
 
           <p className="text-gray-700 mb-6 leading-relaxed">{product.description}</p>
 
@@ -256,6 +347,15 @@ const ProductDetail = () => {
                 {product.category}
               </span>
             </div>
+            
+            {product.ecosystem && (
+              <div className="flex items-center">
+                <span className="text-gray-600 w-32">Ecosystem:</span>
+                <span className="text-blue-700 font-medium capitalize bg-blue-50 px-3 py-1 rounded-full text-sm">
+                  {product.ecosystem}
+                </span>
+              </div>
+            )}
             
             <div className="flex items-center">
               <span className="text-gray-600 w-32">Status:</span>
@@ -462,47 +562,86 @@ const ProductDetail = () => {
           </div>
         ) : relatedProducts.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {relatedProducts.map((relatedProduct) => (
-              <div key={relatedProduct._id} className="card p-4 border border-green-100 hover:shadow-lg transition-all duration-300 hover:border-green-300 group">
-                <Link to={`/products/${relatedProduct._id}`} className="block">
-                  <div className="relative overflow-hidden rounded-lg mb-4">
-                    <img
-                      src={getImageUrl(relatedProduct.images?.[0])}
-                      alt={relatedProduct.name}
-                      className="w-full h-48 object-contain group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = '/api/placeholder/400/300';
-                      }}
-                    />
-                    {relatedProduct.stock === 0 && (
-                      <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center">
-                        <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                          Out of Stock
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <h3 className="font-semibold text-green-900 mb-2 group-hover:text-green-700 transition-colors line-clamp-2">
-                    {relatedProduct.name}
-                  </h3>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-green-700">₹{relatedProduct.price}</span>
-                    <div className="flex items-center">
-                      <span className="text-yellow-400">★</span>
-                      <span className="text-gray-600 text-sm ml-1">
-                        {(relatedProduct.ratings || 0).toFixed(1)}
+            {relatedProducts.map((relatedProduct) => {
+              const hasRelatedOffer = hasValidOffer(relatedProduct);
+              const relatedCurrentPrice = getCurrentPrice(relatedProduct);
+              const relatedOriginalPrice = getOriginalPrice(relatedProduct);
+              
+              return (
+                <div key={relatedProduct._id} className="card p-4 border border-green-100 hover:shadow-lg transition-all duration-300 hover:border-green-300 group relative">
+                  {/* Offer Badge for Related Products */}
+                  {hasRelatedOffer && (
+                    <div className="absolute top-3 right-3 z-10">
+                      <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg">
+                        {getDiscountPercentage(relatedProduct)}% OFF
                       </span>
                     </div>
-                  </div>
+                  )}
                   
-                  <span className="inline-block bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full mt-2 capitalize">
-                    {relatedProduct.category}
-                  </span>
-                </Link>
-              </div>
-            ))}
+                  <Link to={`/products/${relatedProduct._id}`} className="block">
+                    <div className="relative overflow-hidden rounded-lg mb-4">
+                      <img
+                        src={getImageUrl(relatedProduct.images?.[0])}
+                        alt={relatedProduct.name}
+                        className="w-full h-48 object-contain group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.target.src = '/api/placeholder/400/300';
+                        }}
+                      />
+                      {relatedProduct.stock === 0 && (
+                        <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center">
+                          <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                            Out of Stock
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <h3 className="font-semibold text-green-900 mb-2 group-hover:text-green-700 transition-colors line-clamp-2">
+                      {relatedProduct.name}
+                    </h3>
+                    
+                    {/* Price Display for Related Products */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex flex-col">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg font-bold text-green-700">
+                            ₹{relatedCurrentPrice}
+                          </span>
+                          {hasRelatedOffer && (
+                            <span className="text-sm text-gray-500 line-through">
+                              ₹{relatedOriginalPrice}
+                            </span>
+                          )}
+                        </div>
+                        {hasRelatedOffer && (
+                          <span className="text-xs text-red-600 font-semibold">
+                            Save ₹{getSavingsAmount(relatedProduct).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center">
+                        <span className="text-yellow-400">★</span>
+                        <span className="text-gray-600 text-sm ml-1">
+                          {(relatedProduct.ratings || 0).toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="inline-block bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full capitalize">
+                        {relatedProduct.category}
+                      </span>
+                      {relatedProduct.ecosystem && (
+                        <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full capitalize">
+                          {relatedProduct.ecosystem}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-8 bg-green-50 rounded-lg border border-green-100">

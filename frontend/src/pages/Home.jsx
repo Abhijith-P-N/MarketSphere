@@ -17,14 +17,14 @@ const staggerContainer = {
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [saleProducts, setSaleProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saleLoading, setSaleLoading] = useState(true);
   const [email, setEmail] = useState('');
 
   useEffect(() => {
     const fetchFeaturedProducts = async () => {
       try {
-        // This API endpoint assumes you have a backend serving products.
-        // Adjust the URL if your backend API is different.
         const { data } = await axios.get('/api/products?limit=8&sort=rating');
         setFeaturedProducts(data?.products || []);
       } catch (error) {
@@ -34,93 +34,148 @@ const Home = () => {
         setLoading(false);
       }
     };
+
+    const fetchSaleProducts = async () => {
+      try {
+        const { data } = await axios.get('/api/offers/active?limit=4'); // Changed to 4 for 4 cards
+        setSaleProducts(data || []);
+      } catch (error) {
+        console.error('Error fetching sale products:', error);
+        // Fallback to static data if API fails
+        setSaleProducts(getStaticSaleProducts());
+      } finally {
+        setSaleLoading(false);
+      }
+    };
+
     fetchFeaturedProducts();
+    fetchSaleProducts();
   }, []);
+
+  // Helper function to check if product has valid offer
+  const hasValidOffer = (product) => {
+    if (!product.offer?.active) return false;
+    
+    if (product.offer.validUntil) {
+      return new Date(product.offer.validUntil) > new Date();
+    }
+    
+    return true;
+  };
+
+  // Get current price (offer price if valid, else regular price)
+  const getCurrentPrice = (product) => {
+    return hasValidOffer(product) && product.offer.offerPrice 
+      ? product.offer.offerPrice 
+      : product.price;
+  };
+
+  // Get original price for display
+  const getOriginalPrice = (product) => {
+    return product.originalPrice || product.price;
+  };
+
+  // Calculate savings amount
+  const getSavingsAmount = (product) => {
+    if (!hasValidOffer(product)) return 0;
+    return getOriginalPrice(product) - getCurrentPrice(product);
+  };
+
+  // Get discount percentage
+  const getDiscountPercentage = (product) => {
+    if (!hasValidOffer(product)) return 0;
+    return product.offer.discountPercentage;
+  };
+
+  // Helper function to get image URL
+  const getImageUrl = (image) => {
+    if (!image) return '/api/placeholder/400/400';
+    
+    if (typeof image === 'string') {
+      return `/api/images/${image}`;
+    }
+    
+    if (image.url) {
+      return image.url;
+    }
+    
+    if (image._id) {
+      return `/api/images/${image._id}`;
+    }
+    
+    return '/api/placeholder/400/400';
+  };
+
+  // Static fallback data for sale products
+  const getStaticSaleProducts = () => {
+    return [
+      {
+        _id: '1',
+        name: 'Premium Bamboo Toothbrush Set',
+        description: 'Eco-friendly bamboo toothbrushes with charcoal-infused bristles for sustainable oral care.',
+        price: 899,
+        originalPrice: 1299,
+        offer: {
+          active: true,
+          offerPrice: 899,
+          discountPercentage: 31,
+          validUntil: '2024-12-31'
+        },
+        images: ['bamboo-toothbrush.jpg']
+      },
+      {
+        _id: '2',
+        name: 'Organic Cotton Tote Bag',
+        description: 'Stylish and reusable tote bag made from 100% organic cotton, perfect for shopping.',
+        price: 599,
+        originalPrice: 899,
+        offer: {
+          active: true,
+          offerPrice: 599,
+          discountPercentage: 33,
+          validUntil: '2024-12-31'
+        },
+        images: ['cotton-tote.jpg']
+      },
+      {
+        _id: '3',
+        name: 'Natural Beeswax Food Wraps',
+        description: 'Sustainable alternative to plastic wrap, keeps food fresh with natural beeswax.',
+        price: 749,
+        originalPrice: 999,
+        offer: {
+          active: true,
+          offerPrice: 749,
+          discountPercentage: 25,
+          validUntil: '2024-12-31'
+        },
+        images: ['beeswax-wraps.jpg']
+      },
+      {
+        _id: '4',
+        name: 'Recycled Glass Water Bottle',
+        description: 'Elegant water bottle made from recycled glass, BPA-free and environmentally friendly.',
+        price: 1299,
+        originalPrice: 1799,
+        offer: {
+          active: true,
+          offerPrice: 1299,
+          discountPercentage: 28,
+          validUntil: '2024-12-31'
+        },
+        images: ['glass-bottle.jpg']
+      }
+    ];
+  };
 
   const handleSubscribe = () => {
     if (!/\S+@\S+\.\S/.test(email)) {
       toast.error('Please enter a valid email address.');
       return;
     }
-    // In a real application, you would typically send this email to your backend
-    // for newsletter subscription. For this example, we're just showing a toast.
     toast.success('Subscribed successfully! Check your inbox for forest news.');
     setEmail('');
   };
-
-  // Data for sale items
-  const saleProducts = [
-    {
-      name: 'Handcrafted Pine Desk',
-      description: 'Solid wood desk from sustainable pine',
-      image: 'https://images.unsplash.com/photo-1611269154421-4e27233ac5c7?w=500',
-      originalPrice: 19999,
-      salePrice: 14999,
-      link: '/product/pine-desk-sale', // Example link
-    },
-    {
-      name: 'Bamboo Weave Pendant Light',
-      description: 'Light up your room with natural bamboo',
-      image: 'https://images.unsplash.com/photo-1597854233230-640a455b5120?w=500',
-      originalPrice: 4599,
-      salePrice: 3299,
-      link: '/product/bamboo-light-sale',
-    },
-    {
-      name: 'Autumn Leaf Print Scarf',
-      description: 'Warm and cozy scarf for the season',
-      image: 'https://images.unsplash.com/photo-1542777173-15748a3c5d6f?w=500',
-      originalPrice: 2999,
-      salePrice: 1999,
-      link: '/product/autumn-scarf-sale',
-    },
-  ];
-
-  // Data for different forest ecosystems (categories)
-  const forestEcosystems = [
-    {
-      name: 'Bamboo Forest',
-      theme: 'bamboo',
-      image: 'https://images.unsplash.com/photo-1528433556524-74e7e3bfa599?w=500',
-      description: 'Sustainable bamboo products',
-      color: 'from-emerald-400 to-green-600',
-    },
-    {
-      name: 'Pine Wilderness',
-      theme: 'pine',
-      image: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=500',
-      description: 'Evergreen-inspired items',
-      color: 'from-blue-500 to-teal-600',
-    },
-    {
-      name: 'Autumn Woods',
-      theme: 'autumn',
-      image: 'https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=500',
-      description: 'Warm seasonal collections',
-      color: 'from-amber-500 to-orange-600',
-    },
-    {
-      name: 'Tropical Jungle',
-      theme: 'jungle',
-      image: 'https://images.unsplash.com/photo-1518832553480-cd0e625ed3e6?w=500',
-      description: 'Exotic rainforest finds',
-      color: 'from-lime-400 to-green-700',
-    },
-    {
-      name: 'Mystical Fog',
-      theme: 'foggy',
-      image: 'https://images.unsplash.com/photo-1425913397330-cf8af2ff40a1?w=500',
-      description: 'Ethereal and mysterious',
-      color: 'from-gray-400 to-blue-300',
-    },
-    {
-      name: 'Cherry Blossom',
-      theme: 'sakura',
-      image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500',
-      description: 'Delicate floral beauty',
-      color: 'from-pink-300 to-rose-400',
-    },
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-amber-50 to-blue-50">
@@ -135,7 +190,7 @@ const Home = () => {
             className="w-full h-full bg-cover bg-center"
             style={{
               backgroundImage:
-                'url(https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80)',
+                'url(https://skipper.org/cdn/shop/articles/eco_friendly_120cd6de-0473-47d2-bbf4-45f526c82391.png?v=1659684410)',
             }}
           ></div>
         </div>
@@ -150,19 +205,18 @@ const Home = () => {
           {/* Tagline */}
           <div className="inline-flex items-center space-x-4 mb-6 bg-white/10 backdrop-blur-md rounded-full px-6 py-3">
             <span className="text-lg font-light">
-              Sustainable Forest Marketplace
+              Sustainable Eco Marketplace
             </span>
           </div>
 
           {/* Main title */}
           <h1 className="text-6xl md:text-8xl lg:text-9xl font-bold font-serif mb-6 bg-gradient-to-r from-green-200 via-emerald-300 to-amber-200 bg-clip-text text-transparent drop-shadow-xl">
-            WildCart
+            Verdant
           </h1>
 
           {/* Subtitle/Description */}
           <p className="text-xl md:text-2xl lg:text-3xl mb-8 text-green-100 font-light max-w-3xl mx-auto leading-relaxed">
-            Journey through diverse forest ecosystems. Discover unique treasures
-            from bamboo groves to mystical woods.
+            Designed for speed and sustainability, delivering a better experience for you and the planet.
           </p>
 
           {/* Call-to-action buttons */}
@@ -174,256 +228,267 @@ const Home = () => {
               Explore Ecosystems
             </Link>
             <Link
-              to="/about"
+              to="/products?offer=active"
               className="border-2 border-white text-white hover:bg-white hover:text-green-900 text-lg px-12 py-4 rounded-full transition-all duration-300 font-semibold"
             >
-              Our Mission
+              Special Offers
             </Link>
           </div>
         </motion.div>
       </section>
 
-      {/* ======================= ON SALE NOW SECTION (NEW) ======================= */}
-      <section className="py-20 bg-gradient-to-r from-green-50 to-amber-50">
-        <motion.div
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-        >
+      {/* ======================= ON SALE NOW SECTION ======================= */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Heading */}
-          <motion.div className="text-center mb-16" variants={fadeUp}>
-            <h2 className="text-4xl md:text-5xl font-bold text-green-900 mb-4 font-serif">
-              On Sale Now
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4 font-serif">
+              Limited Time Offers
             </h2>
-            <p className="text-xl text-green-700 max-w-2xl mx-auto">
-              Limited-time offers on our most popular forest-themed goods
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Exclusive discounts on our premium forest-inspired collections
             </p>
-          </motion.div>
-
-          {/* Collection Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {saleProducts.map((product, index) => (
-              <motion.div key={index} variants={fadeUp}>
-                <div
-                  className={`rounded-3xl p-6 bg-white shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 h-full flex flex-col`}
-                >
-                  <img
-                    loading="lazy"
-                    src={product.image}
-                    alt={`Sale item ${product.name}`}
-                    className="w-full h-56 object-cover rounded-2xl mb-6 shadow-lg"
-                  />
-                  <h3 className="text-2xl font-bold text-green-900 font-serif mb-3">
-                    {product.name}
-                  </h3>
-                  <p className="text-green-700 mb-4 flex-grow">
-                    {product.description}
-                  </p>
-                  
-                  {/* Price */}
-                  <div className="flex items-baseline gap-3 mb-4">
-                     <span className="text-3xl font-bold text-red-600">
-                      ₹{product.salePrice.toLocaleString('en-IN')}
-                    </span>
-                    <span className="text-xl font-light text-gray-500 line-through">
-                      ₹{product.originalPrice.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-
-                  <Link
-                    to={product.link}
-                    className="inline-flex items-center text-green-600 hover:text-green-800 font-semibold mt-auto"
-                  >
-                    View Deal <span className="ml-2">→</span>
-                  </Link>
-                </div>
-              </motion.div>
-            ))}
           </div>
-        </motion.div>
-      </section>
 
-      {/* ======================= FOREST ECOSYSTEMS SECTION (CATEGORIES) ======================= */}
-      <section className="py-20">
-        <motion.div
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }} // Trigger animation when 30% in view
-        >
-          {/* Section Heading */}
-          <motion.div className="text-center mb-16" variants={fadeUp}>
-            <h2 className="text-4xl md:text-5xl font-bold text-green-900 mb-4 font-serif">
-              Forest Ecosystems
-            </h2>
-            <p className="text-xl text-green-700 max-w-2xl mx-auto">
-              Explore products inspired by different forest environments around
-              the world
-            </p>
-          </motion.div>
-
-          {/* Ecosystem Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {forestEcosystems.map((forest, index) => (
-              <motion.div key={index} variants={fadeUp}>
-                <Link
-                  to={`/products?ecosystem=${forest.theme}`}
-                  className="group relative h-80 rounded-3xl overflow-hidden shadow-2xl transform hover:scale-105 transition-all duration-500 block"
-                >
-                  <img
-                    loading="lazy"
-                    src={forest.image}
-                    alt={`Scene from ${forest.name} - ${forest.description}`}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  {/* Gradient Overlay */}
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${forest.color} opacity-60 group-hover:opacity-40 transition-opacity duration-300`}
-                  ></div>
-                  {/* Card Content */}
-                  <div className="absolute inset-0 p-8 flex flex-col justify-end">
-                    <div>
-                      <h3 className="text-2xl font-bold text-white font-serif mb-2 group-hover:translate-x-2 transition-transform duration-300">
-                        {forest.name}
-                      </h3>
-                      <p className="text-green-100 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300">
-                        {forest.description}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      </section>
-
-      {/* ======================= FEATURED PRODUCTS SECTION ======================= */}
-      <section className="py-20 bg-gradient-to-b from-white to-green-50">
-        <motion.div
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-        >
-          {/* Section Heading */}
-          <motion.div className="text-center mb-16" variants={fadeUp}>
-            <h2 className="text-4xl md:text-5xl font-bold text-green-900 mb-4 font-serif">
-              Forest Treasures
-            </h2>
-            <p className="text-xl text-green-700 max-w-2xl mx-auto">
-              Handpicked items that capture the essence of wilderness
-            </p>
-          </motion.div>
-
-          {/* Products Grid or Loading Skeletons */}
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {[...Array(8)].map((_, index) => (
-                <div
-                  key={index}
-                  className="bg-white rounded-2xl p-4 animate-pulse shadow-lg"
-                >
-                  <div className="bg-green-200 h-48 rounded-xl mb-4"></div>
-                  <div className="bg-green-200 h-4 rounded mb-2"></div>
-                  <div className="bg-green-200 h-4 rounded w-2/3"></div>
+          {/* Sale Products Grid - Updated to 4 columns */}
+          {saleLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Changed to 4 columns */}
+              {[...Array(4)].map((_, index) => ( // Changed to 4 items
+                <div key={index} className="bg-white rounded-xl p-6 animate-pulse shadow-sm border border-gray-100 h-full flex flex-col">
+                  <div className="bg-gray-200 h-64 rounded-lg mb-6"></div>
+                  <div className="bg-gray-200 h-4 rounded mb-3"></div>
+                  <div className="bg-gray-200 h-4 rounded w-3/4 mb-4"></div>
+                  <div className="bg-gray-200 h-6 rounded w-1/2"></div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {featuredProducts.map((product) => (
-                <motion.div key={product._id} variants={fadeUp}>
-                  <div className="bg-white rounded-2xl shadow-lg border border-green-100 overflow-hidden hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-full flex flex-col">
-                    <Link
-                      to={`/product/${product._id}`}
-                      className="block relative overflow-hidden"
-                    >
-                      <img
-                        loading="lazy"
-                        src={
-                          product.images && product.images.length > 0
-                            ? `/api/images/${
-                                product.images[0]._id || product.images[0]
-                              }`
-                            : '/api/placeholder/400/400' // Placeholder if no image exists
-                        }
-                        alt={product.name}
-                        className="w-full h-48 object-contain transition-transform duration-500 hover:scale-110"
-                      />
-                    </Link>
-                    <div className="p-6 flex flex-col flex-grow">
-                      <Link to={`/product/${product._id}`}>
-                        <h3 className="text-lg font-semibold text-green-900 mb-2 hover:text-green-600 transition-colors line-clamp-2">
-                          {product.name}
-                        </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Changed to 4 columns */}
+              {saleProducts.map((product) => {
+                const hasOffer = hasValidOffer(product);
+                const currentPrice = getCurrentPrice(product);
+                const originalPrice = getOriginalPrice(product);
+                const savingsAmount = getSavingsAmount(product);
+                const discountPercentage = getDiscountPercentage(product);
+
+                return (
+                  <div key={product._id} className="flex">
+                    <div className="bg-white rounded-xl shadow-sm hover:shadow-lg border border-gray-100 transform hover:-translate-y-1 transition-all duration-300 h-full flex flex-col relative overflow-hidden group w-full">
+                      {/* Offer Badge */}
+                      {hasOffer && (
+                        <div className="absolute top-4 right-4 z-10">
+                          <span className="bg-gradient-to-r from-red-500 to-pink-600 text-white px-3 py-2 rounded-full text-sm font-bold shadow-lg">
+                            {discountPercentage}% OFF
+                          </span>
+                        </div>
+                      )}
+                      
+                      <Link to={`/product/${product._id}`} className="block relative overflow-hidden bg-gray-50">
+                        <img
+                          loading="lazy"
+                          src={getImageUrl(product.images?.[0])}
+                          alt={product.name}
+                          className="w-full h-64 object-cover rounded-t-xl transition-transform duration-500 group-hover:scale-105"
+                        />
                       </Link>
-                      <p className="text-green-700 text-sm mb-4 line-clamp-2 flex-grow">
-                        {product.description}
-                      </p>
-                      <div className="flex items-center justify-between mt-auto">
-                        <span className="text-2xl font-bold text-amber-600">
-                          ₹{product.price}
-                        </span>
+                      
+                      <div className="p-6 flex flex-col flex-grow">
+                        <Link to={`/product/${product._id}`}>
+                          <h3 className="text-xl font-semibold text-gray-900 mb-3 group-hover:text-green-600 transition-colors duration-300 line-clamp-2">
+                            {product.name}
+                          </h3>
+                        </Link>
+                        
+                        <p className="text-gray-600 text-sm mb-4 flex-grow leading-relaxed line-clamp-3">
+                          {product.description}
+                        </p>
+                        
+                        {/* Price Display */}
+                        <div className="space-y-2 mt-auto">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-2xl font-bold text-gray-900">
+                              ₹{currentPrice.toLocaleString('en-IN')}
+                            </span>
+                            {hasOffer && (
+                              <span className="text-lg text-gray-500 line-through">
+                                ₹{originalPrice.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {hasOffer && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-green-600">
+                                Save ₹{savingsAmount.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <Link
+                          to={`/product/${product._id}`}
+                          className="inline-flex items-center justify-center w-full mt-4 bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-800 hover:text-white transition-colors duration-300 group/btn"
+                        >
+                          <span>View Details</span>
+                          <span className="ml-2 transform group-hover/btn:translate-x-1 transition-transform duration-300">→</span>
+                        </Link>
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* View All Offers Button */}
+          <div className="text-center mt-12">
+            <Link
+              to="/products?offer=active"
+              className="inline-flex items-center bg-gray-900 text-white px-8 py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors duration-300 shadow-sm hover:shadow-md group"
+            >
+              <span>View All Special Offers</span>
+              <span className="ml-3 transform group-hover:translate-x-1 transition-transform duration-300">→</span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ======================= FEATURED PRODUCTS SECTION ======================= */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Heading */}
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4 font-serif">
+              Featured Collections
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Curated selection of our most beloved forest-inspired products
+            </p>
+          </div>
+
+          {/* Products Grid or Loading Skeletons */}
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(8)].map((_, index) => (
+                <div
+                  key={index}
+                  className="bg-white rounded-xl p-4 animate-pulse shadow-sm border border-gray-100"
+                >
+                  <div className="bg-gray-200 h-48 rounded-lg mb-4"></div>
+                  <div className="bg-gray-200 h-4 rounded mb-2"></div>
+                  <div className="bg-gray-200 h-4 rounded w-2/3"></div>
+                </div>
               ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredProducts.map((product) => {
+                const hasOffer = hasValidOffer(product);
+                const currentPrice = getCurrentPrice(product);
+                const originalPrice = getOriginalPrice(product);
+                const discountPercentage = getDiscountPercentage(product);
+
+                return (
+                  <div key={product._id}>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300 h-full flex flex-col relative group">
+                      {/* Offer Badge */}
+                      {hasOffer && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <span className="bg-red-500 text-white px-2 py-1 rounded text-xs font-medium shadow-sm">
+                            {discountPercentage}% OFF
+                          </span>
+                        </div>
+                      )}
+                      
+                      <Link
+                        to={`/product/${product._id}`}
+                        className="block relative overflow-hidden bg-gray-50"
+                      >
+                        <img
+                          loading="lazy"
+                          src={getImageUrl(product.images?.[0])}
+                          alt={product.name}
+                          className="w-full h-48 object-contain transition-transform duration-500 group-hover:scale-105"
+                        />
+                      </Link>
+                      <div className="p-4 flex flex-col flex-grow">
+                        <Link to={`/product/${product._id}`}>
+                          <h3 className="font-medium text-gray-900 mb-2 hover:text-green-600 transition-colors duration-300 line-clamp-2 text-sm">
+                            {product.name}
+                          </h3>
+                        </Link>
+                        <p className="text-gray-600 text-xs mb-3 line-clamp-2 flex-grow leading-relaxed">
+                          {product.description}
+                        </p>
+                        <div className="flex items-center justify-between mt-auto">
+                          <div className="flex flex-col">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-lg font-semibold text-gray-900">
+                                ₹{currentPrice}
+                              </span>
+                              {hasOffer && (
+                                <span className="text-sm text-gray-500 line-through">
+                                  ₹{originalPrice}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <Link
+                          to={`/product/${product._id}`}
+                          className="w-full mt-3 text-center bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors duration-300"
+                        >
+                          View Product
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* "Discover All Treasures" button */}
-          <motion.div className="text-center mt-16" variants={fadeUp}>
+          <div className="text-center mt-16">
             <Link
               to="/products"
-              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-12 py-4 rounded-full text-lg font-semibold inline-flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+              className="inline-flex items-center bg-gray-900 text-white px-8 py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors duration-300 shadow-sm hover:shadow-md group"
             >
-              <span>Discover All Treasures</span>
+              <span>View All Products</span>
+              <span className="ml-3 transform group-hover:translate-x-1 transition-transform duration-300">→</span>
             </Link>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </section>
 
       {/* ======================= NEWSLETTER SIGN-UP SECTION ======================= */}
-      <section className="py-20 bg-gradient-to-t from-green-50 to-amber-50">
-        <motion.div
-          className="max-w-3xl mx-auto text-center px-4 sm:px-6 lg:px-8"
-          variants={fadeUp}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-        >
+      <section className="py-20 bg-gray-900">
+        <div className="max-w-3xl mx-auto text-center px-4 sm:px-6 lg:px-8">
           {/* Section Heading */}
-          <h2 className="text-4xl md:text-5xl font-bold text-green-900 mb-4 font-serif">
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-serif">
             Stay Connected
           </h2>
-          <p className="text-lg text-green-700 mb-8">
-            Join our newsletter for eco-friendly updates, deals, and new forest
-            collections.
+          <p className="text-lg text-gray-300 mb-8">
+            Join our newsletter for eco-friendly updates, deals, and new forest collections.
           </p>
 
           {/* Email input and subscribe button */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
             <input
               type="email"
               placeholder="Enter your email"
-              className="w-full sm:w-2/3 px-6 py-4 rounded-full border border-green-300 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent text-green-900 placeholder-green-400"
+              className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-600 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
             <button
               onClick={handleSubscribe}
-              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-8 py-4 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors duration-300 shadow-sm hover:shadow-md"
             >
               Subscribe
             </button>
           </div>
-        </motion.div>
+        </div>
       </section>
     </div>
   );
