@@ -44,9 +44,8 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-/* Add to your existing ProductDetail.css */
 
-/* Enhanced White and Green Theme */
+/* Enhanced White Theme */
 .btn-primary {
   background: linear-gradient(135deg, #059669 0%, #047857 100%);
   color: white;
@@ -90,37 +89,44 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2);
 }
 
-/* Green color palette */
+/* Color palette - keeping green text colors but changing backgrounds to white */
 .text-green-900 { color: #064e3b; }
 .text-green-800 { color: #065f46; }
 .text-green-700 { color: #047857; }
 .text-green-600 { color: #059669; }
 .text-green-500 { color: #10b981; }
 
-.bg-green-900 { background-color: #064e3b; }
-.bg-green-800 { background-color: #065f46; }
-.bg-green-700 { background-color: #047857; }
-.bg-green-600 { background-color: #059669; }
-.bg-green-500 { background-color: #10b981; }
-.bg-green-100 { background-color: #dcfce7; }
-.bg-green-50 { background-color: #f0fdf4; }
+/* Background colors changed to white or very light gray */
+.bg-green-900 { background-color: #ffffff; }
+.bg-green-800 { background-color: #ffffff; }
+.bg-green-700 { background-color: #ffffff; }
+.bg-green-600 { background-color: #ffffff; }
+.bg-green-500 { background-color: #ffffff; }
+.bg-green-100 { background-color: #f8fafc; } /* Very light gray instead of green */
+.bg-green-50 { background-color: #ffffff; } /* Pure white */
 
-.border-green-100 { border-color: #dcfce7; }
-.border-green-300 { border-color: #86efac; }
-.border-green-500 { border-color: #10b981; }
+/* Border colors - keeping some green for accents */
+.border-green-100 { border-color: #e5e7eb; } /* Light gray instead of green */
+.border-green-300 { border-color: #d1d5db; } /* Medium gray instead of green */
+.border-green-500 { border-color: #059669; } /* Keeping green for focus states */
 
-/* Card enhancements */
+/* Additional white background utility classes */
+.bg-white { background-color: #ffffff; }
+.bg-gray-50 { background-color: #f9fafb; }
+.bg-gray-100 { background-color: #f3f4f6; }
+
+/* Card enhancements - pure white */
 .card {
   background: white;
   border-radius: 1rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-  border: 1px solid #f0fdf4;
+  border: 1px solid #e5e7eb; /* Gray border instead of green */
   transition: all 0.3s ease;
 }
 
 .card:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  border-color: #86efac;
+  border-color: #d1d5db; /* Gray border on hover */
 }
 
 /* Input field enhancements */
@@ -160,7 +166,7 @@ h1, h2, h3, h4, h5, h6 {
   transition-timing-function: ease;
 }
 
-/* Responsive design for related products */
+/* Responsive design */
 @media (max-width: 768px) {
   .grid-cols-1 {
     grid-template-columns: 1fr;

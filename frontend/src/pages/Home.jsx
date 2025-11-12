@@ -37,12 +37,17 @@ const Home = () => {
 
     const fetchSaleProducts = async () => {
       try {
-        const { data } = await axios.get('/api/offers/active?limit=4'); // Changed to 4 for 4 cards
-        setSaleProducts(data || []);
+        // Fetch all products and filter those with active offers
+        const { data } = await axios.get('/api/products?limit=20');
+        const productsWithOffers = data?.products?.filter(product => 
+          hasValidOffer(product)
+        ).slice(0, 4) || []; // Take first 4 products with offers
+        
+        setSaleProducts(productsWithOffers);
       } catch (error) {
         console.error('Error fetching sale products:', error);
-        // Fallback to static data if API fails
-        setSaleProducts(getStaticSaleProducts());
+        toast.error('Failed to load special offers.');
+        setSaleProducts([]);
       } finally {
         setSaleLoading(false);
       }
@@ -84,7 +89,17 @@ const Home = () => {
   // Get discount percentage
   const getDiscountPercentage = (product) => {
     if (!hasValidOffer(product)) return 0;
-    return product.offer.discountPercentage;
+    
+    // If discount percentage is provided, use it
+    if (product.offer.discountPercentage) {
+      return product.offer.discountPercentage;
+    }
+    
+    // Calculate discount percentage if not provided
+    const originalPrice = getOriginalPrice(product);
+    const currentPrice = getCurrentPrice(product);
+    const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
+    return Math.round(discount);
   };
 
   // Helper function to get image URL
@@ -104,68 +119,6 @@ const Home = () => {
     }
     
     return '/api/placeholder/400/400';
-  };
-
-  // Static fallback data for sale products
-  const getStaticSaleProducts = () => {
-    return [
-      {
-        _id: '1',
-        name: 'Premium Bamboo Toothbrush Set',
-        description: 'Eco-friendly bamboo toothbrushes with charcoal-infused bristles for sustainable oral care.',
-        price: 899,
-        originalPrice: 1299,
-        offer: {
-          active: true,
-          offerPrice: 899,
-          discountPercentage: 31,
-          validUntil: '2024-12-31'
-        },
-        images: ['bamboo-toothbrush.jpg']
-      },
-      {
-        _id: '2',
-        name: 'Organic Cotton Tote Bag',
-        description: 'Stylish and reusable tote bag made from 100% organic cotton, perfect for shopping.',
-        price: 599,
-        originalPrice: 899,
-        offer: {
-          active: true,
-          offerPrice: 599,
-          discountPercentage: 33,
-          validUntil: '2024-12-31'
-        },
-        images: ['cotton-tote.jpg']
-      },
-      {
-        _id: '3',
-        name: 'Natural Beeswax Food Wraps',
-        description: 'Sustainable alternative to plastic wrap, keeps food fresh with natural beeswax.',
-        price: 749,
-        originalPrice: 999,
-        offer: {
-          active: true,
-          offerPrice: 749,
-          discountPercentage: 25,
-          validUntil: '2024-12-31'
-        },
-        images: ['beeswax-wraps.jpg']
-      },
-      {
-        _id: '4',
-        name: 'Recycled Glass Water Bottle',
-        description: 'Elegant water bottle made from recycled glass, BPA-free and environmentally friendly.',
-        price: 1299,
-        originalPrice: 1799,
-        offer: {
-          active: true,
-          offerPrice: 1299,
-          discountPercentage: 28,
-          validUntil: '2024-12-31'
-        },
-        images: ['glass-bottle.jpg']
-      }
-    ];
   };
 
   const handleSubscribe = () => {
@@ -237,23 +190,23 @@ const Home = () => {
         </motion.div>
       </section>
 
-      {/* ======================= ON SALE NOW SECTION ======================= */}
+      {/* ======================= SPECIAL OFFERS SECTION ======================= */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Heading */}
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4 font-serif">
-              Limited Time Offers
+              Special Offers
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Exclusive discounts on our premium forest-inspired collections
             </p>
           </div>
 
-          {/* Sale Products Grid - Updated to 4 columns */}
+          {/* Sale Products Grid */}
           {saleLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Changed to 4 columns */}
-              {[...Array(4)].map((_, index) => ( // Changed to 4 items
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, index) => (
                 <div key={index} className="bg-white rounded-xl p-6 animate-pulse shadow-sm border border-gray-100 h-full flex flex-col">
                   <div className="bg-gray-200 h-64 rounded-lg mb-6"></div>
                   <div className="bg-gray-200 h-4 rounded mb-3"></div>
@@ -262,8 +215,8 @@ const Home = () => {
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Changed to 4 columns */}
+          ) : saleProducts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {saleProducts.map((product) => {
                 const hasOffer = hasValidOffer(product);
                 const currentPrice = getCurrentPrice(product);
@@ -338,18 +291,39 @@ const Home = () => {
                 );
               })}
             </div>
+          ) : (
+            // No offers available message
+            <div className="text-center py-12">
+              <div className="bg-white rounded-xl p-8 max-w-md mx-auto shadow-sm border border-gray-100">
+                <div className="text-6xl mb-4">🌿</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  No Special Offers Available
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Check back later for exciting discounts and promotions!
+                </p>
+                <Link
+                  to="/products"
+                  className="inline-flex items-center bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors duration-300"
+                >
+                  Browse All Products
+                </Link>
+              </div>
+            </div>
           )}
 
-          {/* View All Offers Button */}
-          <div className="text-center mt-12">
-            <Link
-              to="/products?offer=active"
-              className="inline-flex items-center bg-gray-900 text-white px-8 py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors duration-300 shadow-sm hover:shadow-md group"
-            >
-              <span>View All Special Offers</span>
-              <span className="ml-3 transform group-hover:translate-x-1 transition-transform duration-300">→</span>
-            </Link>
-          </div>
+          {/* View All Offers Button - Only show if there are offers */}
+          {saleProducts.length > 0 && (
+            <div className="text-center mt-12">
+              <Link
+                to="/products?offer=active"
+                className="inline-flex items-center bg-gray-900 text-white px-8 py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors duration-300 shadow-sm hover:shadow-md group"
+              >
+                <span>View All Special Offers</span>
+                <span className="ml-3 transform group-hover:translate-x-1 transition-transform duration-300">→</span>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 

@@ -226,5 +226,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'production'}`);
-  console.log(`Security features: Basic`);
+  console.log(`Security features: advanced`);
 });

@@ -4,16 +4,10 @@ import User from '../models/User.js';
 import nodemailer from 'nodemailer';
 import { auth } from '../middleware/auth.js';
 import { OAuth2Client } from 'google-auth-library';
+import { generateAccessToken } from '../middleware/auth.js'; // ✅ use secure token generator
 
 const router = express.Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-/** ================================
- *  JWT TOKEN GENERATOR
- *  ================================ */
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
-};
 
 /** ================================
  *  SEND EMAIL FUNCTION
@@ -50,7 +44,8 @@ router.post('/register', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     if (user) {
-      if (user.isVerified) return res.status(400).json({ message: 'User already exists' });
+      if (user.isVerified)
+        return res.status(400).json({ message: 'User already exists' });
 
       user.name = name;
       user.password = password;
@@ -103,7 +98,7 @@ router.post('/verify-otp', async (req, res) => {
     user.otpExpires = undefined;
     await user.save();
 
-    const token = generateToken(user._id);
+    const token = generateAccessToken(user._id); // ✅ secure token
 
     res.status(200).json({
       message: 'OTP verified successfully',
@@ -128,17 +123,20 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
-    if (!user.isVerified) return res.status(401).json({ message: 'Please verify your email first' });
+    if (!user.isVerified)
+      return res.status(401).json({ message: 'Please verify your email first' });
 
     const isMatch = await user.correctPassword(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const token = generateAccessToken(user._id); // ✅ secure token
 
     res.status(200).json({
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id),
+      token,
     });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
@@ -171,11 +169,11 @@ router.post('/google', async (req, res) => {
         googleId,
         isVerified: true,
         avatar: picture,
-        password: Math.random().toString(36).slice(-8), // temp password
+        password: Math.random().toString(36).slice(-8), // temporary
       });
     }
 
-    const jwtToken = generateToken(user._id);
+    const jwtToken = generateAccessToken(user._id); // ✅ secure token
 
     res.status(200).json({
       _id: user._id,
@@ -189,6 +187,7 @@ router.post('/google', async (req, res) => {
     res.status(500).json({ message: 'Google login failed' });
   }
 });
+
 /** ================================
  *  FORGOT PASSWORD
  *  ================================ */
@@ -196,38 +195,37 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required' });
-    }
+    if (!email) return res.status(400).json({ message: 'Email is required' });
 
     const user = await User.findOne({ email });
-    
-    // Don't reveal if email exists or not for security
+
+    // Don't reveal if email exists or not
     if (!user) {
-      return res.status(200).json({ 
-        message: 'If the email exists, a reset link has been sent' 
+      return res.status(200).json({
+        message: 'If the email exists, a reset link has been sent',
       });
     }
 
-    // Generate reset token
     const resetToken = jwt.sign(
-      { id: user._id }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '1h' }
+      { id: user._id },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: '1h',
+        issuer: process.env.JWT_ISSUER || 'marketsphere-api',
+        audience: process.env.JWT_AUDIENCE || 'marketsphere-app',
+      }
     );
 
-    // Construct reset URL
     const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
 
-    // Send email
     await sendEmail(
       email,
       'MarketSphere - Reset Your Password',
-      `Hi ${user.name},\n\nYou requested to reset your password. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this, please ignore this email.\n\n- MarketSphere Team`
+      `Hi ${user.name},\n\nYou requested to reset your password. Click the link below to reset it:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn’t request this, ignore this email.\n\n- MarketSphere Team`
     );
 
-    res.status(200).json({ 
-      message: 'If the email exists, a reset link has been sent' 
+    res.status(200).json({
+      message: 'If the email exists, a reset link has been sent',
     });
   } catch (error) {
     console.error('FORGOT PASSWORD ERROR:', error);
@@ -242,30 +240,29 @@ router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
 
-    if (!token || !password) {
+    if (!token || !password)
       return res.status(400).json({ message: 'Token and password are required' });
-    }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      issuer: process.env.JWT_ISSUER || 'marketsphere-api',
+      audience: process.env.JWT_AUDIENCE || 'marketsphere-app',
+    });
+
     const user = await User.findById(decoded.id);
-
-    if (!user) {
+    if (!user)
       return res.status(400).json({ message: 'Invalid or expired reset token' });
-    }
 
-    // Update password
     user.password = password;
     await user.save();
 
     res.status(200).json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error('RESET PASSWORD ERROR:', error);
-    
+
     if (error.name === 'TokenExpiredError') {
       return res.status(400).json({ message: 'Reset token has expired' });
     }
-    
+
     if (error.name === 'JsonWebTokenError') {
       return res.status(400).json({ message: 'Invalid reset token' });
     }
