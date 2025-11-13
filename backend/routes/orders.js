@@ -1,10 +1,23 @@
 import express from 'express';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import Stats from '../models/Stats.js';
 import { auth, admin } from '../middleware/auth.js';
 import { sendEmail } from '../utils/sendEmail.js';
 
 const router = express.Router();
+
+/* =========================
+   STATS HELPER
+   Ensures a single stats doc exists and returns it
+========================= */
+const getStats = async () => {
+  let stats = await Stats.findOne();
+  if (!stats) {
+    stats = await Stats.create({});
+  }
+  return stats;
+};
 
 // Helper function to generate order items HTML for emails
 const generateOrderItemsHTML = (orderItems) => {
@@ -40,12 +53,13 @@ const generateOrderItemsHTML = (orderItems) => {
 
 // Helper function to generate shipping address HTML
 const generateShippingAddressHTML = (shippingAddress) => {
+  if (!shippingAddress) return '<p>No shipping address provided</p>';
   return `
     <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; font-family: Arial, sans-serif; color: #333; font-size: 15px; line-height: 1.6;">
-      <strong>${shippingAddress.name}</strong><br>
-      ${shippingAddress.street}<br>
-      ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}<br>
-      ${shippingAddress.country}
+      <strong>${shippingAddress.name || ''}</strong><br>
+      ${shippingAddress.street || shippingAddress.address || ''}<br>
+      ${shippingAddress.city || ''}${shippingAddress.state ? ', ' + shippingAddress.state : ''} ${shippingAddress.postalCode || shippingAddress.zipCode || ''}<br>
+      ${shippingAddress.country || ''}
     </div>
   `;
 };
@@ -74,6 +88,7 @@ const wrapEmail = (title, content) => {
 
 /* =======================
    CREATE NEW ORDER
+   (also update stats: totalRevenue += totalPrice, totalOrders += 1)
 ======================= */
 router.post('/', auth, async (req, res) => {
   try {
@@ -132,6 +147,17 @@ router.post('/', auth, async (req, res) => {
     // Reduce stock
     for (const item of orderItems) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.qty } });
+    }
+
+    // Update stats: increase revenue and orders count
+    try {
+      const stats = await getStats();
+      stats.totalRevenue += Number(totalPrice || 0);
+      stats.totalOrders += 1;
+      await stats.save();
+    } catch (statsErr) {
+      console.error('Failed to update stats on order creation:', statsErr);
+      // don't fail the order if stats update fails
     }
 
     // Populate user info for email
@@ -214,7 +240,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 /* =======================
-   GET USER ORDERS (PAGINATED)
+   GET USER ORDERS (PAGINATED) - exclude cancelled
 ======================= */
 router.get('/my-orders', auth, async (req, res) => {
   try {
@@ -230,9 +256,15 @@ router.get('/my-orders', auth, async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder;
 
-    const total = await Order.countDocuments({ user: req.user._id });
+    // Exclude cancelled orders for user list
+    const query = {
+      user: req.user._id,
+      status: { $ne: 'cancelled' }
+    };
 
-    const orders = await Order.find({ user: req.user._id })
+    const total = await Order.countDocuments(query);
+
+    const orders = await Order.find(query)
       .sort(sortOptions)
       .skip(skip)
       .limit(limit);
@@ -271,6 +303,8 @@ router.get('/:id', auth, async (req, res) => {
 
 /* =======================
    ADMIN: GET ALL ORDERS (PAGINATED & SORTED)
+   Admin sees ALL orders by default; can filter by ?status=...
+   Returns cancelledCount for dashboard
 ======================= */
 router.get('/', auth, admin, async (req, res) => {
   try {
@@ -286,7 +320,7 @@ router.get('/', auth, admin, async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder;
 
-    // Build filter object
+    // Build filter object - admin sees ALL orders unless they pass status
     const filter = {};
     if (req.query.status && req.query.status !== 'all') {
       filter.status = req.query.status;
@@ -300,14 +334,32 @@ router.get('/', auth, admin, async (req, res) => {
       .skip(skip)
       .limit(limit);
 
+    // Count cancelled orders across all orders
+    const cancelledCount = await Order.countDocuments({ status: 'cancelled' });
+
     res.json({
       orders,
       currentPage: page,
       totalPages: Math.ceil(total / limit),
       totalOrders: total,
+      cancelledCount,
     });
   } catch (error) {
     console.error('Error fetching all orders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/* =======================
+   ADMIN: STATS ENDPOINT
+   Returns the Stats doc (totalRevenue, totalOrders, cancelledOrders)
+======================= */
+router.get('/admin/stats', auth, admin, async (req, res) => {
+  try {
+    const stats = await getStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching stats:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -328,6 +380,7 @@ router.get('/admin/:id', auth, admin, async (req, res) => {
 
 /* =======================
    ADMIN: UPDATE ORDER STATUS
+   (ship / deliver)
 ======================= */
 
 // Mark order as shipped
@@ -338,6 +391,7 @@ router.put('/:id/ship', auth, admin, async (req, res) => {
 
     order.status = 'shipped';
     order.trackingNumber = req.body.trackingNumber || `TRK${Date.now()}`;
+    order.shippedAt = Date.now();
     await order.save();
 
     // Send shipped email
@@ -430,28 +484,62 @@ router.put('/:id/deliver', auth, admin, async (req, res) => {
   }
 });
 
-// Cancel order
-router.put('/:id/cancel', auth, admin, async (req, res) => {
+/* =======================
+   CANCEL ORDER (admin OR owner)
+   - unified route: admin can cancel any order
+   - user can cancel their own order (only if NOT delivered and not already cancelled)
+   - stock is restored for non-delivered orders
+   - email is sent to the order user
+   - stats updated: totalRevenue -= order.totalPrice, cancelledOrders += 1
+======================= */
+router.put('/:id/cancel', auth, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate('user', 'name email');
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Only restore stock if order hasn't been delivered
-    if (!order.isDelivered) {
-      for (const item of order.orderItems) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.qty } });
-      }
+    // Authorization:
+    const isOwner = order.user._id.toString() === req.user._id.toString();
+    const isAdminUser = !!req.user.isAdmin;
+
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: 'Not authorized to cancel this order' });
+    }
+
+    // Prevent cancelling delivered or already cancelled
+    if (order.status === 'delivered') {
+      return res.status(400).json({ message: 'Cannot cancel delivered orders' });
+    }
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ message: 'Order is already cancelled' });
+    }
+
+    // Restore stock only if order hasn't been delivered (i.e. not delivered)
+    for (const item of order.orderItems) {
+      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.qty } });
     }
 
     order.status = 'cancelled';
     await order.save();
+
+    // UPDATE STATS (decrease revenue, increase cancelled count)
+    try {
+      const stats = await getStats();
+      stats.totalRevenue -= Number(order.totalPrice || 0);
+      // prevent negative revenue
+      if (stats.totalRevenue < 0) stats.totalRevenue = 0;
+      stats.cancelledOrders += 1;
+      await stats.save();
+    } catch (statsErr) {
+      console.error('Failed to update stats on cancellation:', statsErr);
+      // don't fail the cancellation if stats update fails
+    }
 
     // Send cancelled email
     try {
       const itemsHtml = generateOrderItemsHTML(order.orderItems);
       const emailContent = `
         <p>Hi ${order.user.name},</p>
-        <p>Your order #${order._id.toString().slice(-8).toUpperCase()} has been cancelled as requested.</p>
+        <p>Your order #${order._id.toString().slice(-8).toUpperCase()} has been cancelled${isAdminUser && req.user._id.toString() !== order.user._id.toString() ? ' by an administrator' : ''}.</p>
         <p>If you've already been charged, a refund will be processed shortly. If this was a mistake, please contact our support team immediately.</p>
         
         <h3 style="color: #2d3748; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; font-size: 18px;">Cancelled Items</h3>
@@ -476,6 +564,7 @@ router.put('/:id/cancel', auth, admin, async (req, res) => {
       );
     } catch (emailError) {
       console.error('Error sending cancelled email:', emailError);
+      // don't fail cancellation if email fails
     }
 
     res.json({ message: 'Order cancelled', order });

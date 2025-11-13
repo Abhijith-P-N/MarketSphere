@@ -14,27 +14,34 @@ const AdminOrders = () => {
     direction: 'desc'
   });
 
+  // Prevent multiple clicks on actions
+  const [actionLoading, setActionLoading] = useState(null);
+
   useEffect(() => {
     fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter, sortConfig]);
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem('marketsphereToken');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       const params = new URLSearchParams({
         page: currentPage,
         limit: '10',
         sortBy: sortConfig.key,
         sortOrder: sortConfig.direction
       });
-      
+
       if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
 
-      const { data } = await axios.get(`/api/orders?${params}`);
+      const { data } = await axios.get(`/api/orders?${params}`, { headers });
       setOrders(data.orders);
-      setTotalPages(data.totalPages);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       console.error('Error fetching orders:', error);
       toast.error('Failed to load orders');
@@ -45,6 +52,13 @@ const AdminOrders = () => {
 
   const updateOrderStatus = async (orderId, status, trackingNumber = '') => {
     try {
+      // prevent repeated clicks for the same order
+      if (actionLoading === orderId) return;
+      setActionLoading(orderId);
+
+      const token = localStorage.getItem('marketsphereToken');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       let endpoint = '';
       let data = {};
 
@@ -60,14 +74,18 @@ const AdminOrders = () => {
           endpoint = `cancel`;
           break;
         default:
+          setActionLoading(null);
           return;
       }
 
-      await axios.put(`/api/orders/${orderId}/${endpoint}`, data);
+      await axios.put(`/api/orders/${orderId}/${endpoint}`, data, { headers });
       toast.success(`Order marked as ${status}`);
-      fetchOrders(); // Refresh the list
+      await fetchOrders();
     } catch (error) {
-      toast.error('Failed to update order status');
+      console.error('Error updating order status:', error);
+      toast.error(error.response?.data?.message || 'Failed to update order status');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -146,7 +164,6 @@ const AdminOrders = () => {
             </select>
           </div>
           
-          {/* Sort Info */}
           <div className="ml-auto">
             <div className="text-sm text-gray-600">
               Sorted by: <span className="font-medium">{sortConfig.key}</span> 
@@ -194,6 +211,7 @@ const AdminOrders = () => {
                 </th>
               </tr>
             </thead>
+
             <tbody className="bg-white divide-y divide-gray-200">
               {orders?.map((order) => (
                 <tr key={order._id} className="hover:bg-gray-50 transition-colors">
@@ -202,57 +220,72 @@ const AdminOrders = () => {
                       #{order._id.slice(-8).toUpperCase()}
                     </div>
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{order.user?.name}</div>
                     <div className="text-sm text-gray-500">{order.user?.email}</div>
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
                       {formatDate(order.createdAt)}
                     </div>
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-semibold text-wood-600">
                       ₹{order.totalPrice.toFixed(2)}
                     </div>
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </span>
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex flex-col space-y-2">
+
                       <Link
                         to={`/admin/order/${order._id}`}
                         className="text-forest-600 hover:text-forest-700 transition-colors"
                       >
                         View Details
                       </Link>
-                      
+
+                      {/* PROCESSING ACTIONS */}
                       {order.status === 'processing' && (
                         <div className="flex space-x-2">
                           <button
                             onClick={() => updateOrderStatus(order._id, 'shipped')}
-                            className="text-blue-600 hover:text-blue-700 transition-colors text-xs"
+                            disabled={actionLoading === order._id}
+                            className={`text-blue-600 hover:text-blue-700 transition-colors text-xs 
+                              ${actionLoading === order._id ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            Mark Shipped
+                            {actionLoading === order._id ? 'Processing...' : 'Mark Shipped'}
                           </button>
+
                           <button
                             onClick={() => updateOrderStatus(order._id, 'cancelled')}
-                            className="text-red-600 hover:text-red-700 transition-colors text-xs"
+                            disabled={actionLoading === order._id}
+                            className={`text-red-600 hover:text-red-700 transition-colors text-xs 
+                              ${actionLoading === order._id ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            Cancel
+                            {actionLoading === order._id ? 'Processing...' : 'Cancel'}
                           </button>
                         </div>
                       )}
-                      
+
+                      {/* SHIPPED ACTION */}
                       {order.status === 'shipped' && (
                         <button
                           onClick={() => updateOrderStatus(order._id, 'delivered')}
-                          className="text-green-600 hover:text-green-700 transition-colors text-xs"
+                          disabled={actionLoading === order._id}
+                          className={`text-green-600 hover:text-green-700 transition-colors text-xs
+                            ${actionLoading === order._id ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          Mark Delivered
+                          {actionLoading === order._id ? 'Processing...' : 'Mark Delivered'}
                         </button>
                       )}
                     </div>
@@ -270,8 +303,7 @@ const AdminOrders = () => {
             <p className="text-gray-500">
               {statusFilter === 'all' 
                 ? 'No orders have been placed yet.' 
-                : `No orders with status "${statusFilter}" found.`
-              }
+                : `No orders with status "${statusFilter}" found.`}
             </p>
           </div>
         )}
@@ -287,7 +319,7 @@ const AdminOrders = () => {
           >
             Previous
           </button>
-          
+
           {[...Array(totalPages)].map((_, index) => (
             <button
               key={index + 1}
@@ -301,7 +333,7 @@ const AdminOrders = () => {
               {index + 1}
             </button>
           ))}
-          
+
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}

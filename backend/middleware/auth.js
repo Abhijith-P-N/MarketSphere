@@ -36,7 +36,7 @@ const SECURITY_CONFIG = {
  *  ================================ */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 10,
   message: { 
     error: 'Too many authentication attempts, please try again after 15 minutes',
     code: 'RATE_LIMIT_EXCEEDED'

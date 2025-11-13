@@ -5,37 +5,48 @@ import toast from 'react-hot-toast';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
-    totalSales: 0,
+    totalRevenue: 0,
     totalOrders: 0,
+    cancelledOrders: 0,
+  });
+  const [extraCounts, setExtraCounts] = useState({
     totalProducts: 0,
-    totalUsers: 0
+    totalUsers: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setLoading(true);
       try {
-        const [ordersRes, productsRes, usersRes] = await Promise.all([
-          axios.get('/api/orders?limit=5'),
-          axios.get('/api/products?limit=5'),
-          axios.get('/api/users')
+        const token = localStorage.getItem('marketsphereToken');
+
+        // Headers for admin endpoints
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        // Fetch stats, recent orders, products and users in parallel
+        const [statsRes, ordersRes, productsRes, usersRes] = await Promise.all([
+          axios.get('/api/orders/admin/stats', { headers }),
+          axios.get('/api/orders?limit=5', { headers }), // admin orders endpoint
+          axios.get('/api/products?limit=5', { headers }),
+          axios.get('/api/users', { headers }),
         ]);
 
+        const statsData = statsRes.data || {};
         const orders = ordersRes.data.orders || [];
         const products = productsRes.data.products || [];
         const users = usersRes.data || [];
 
-        // Calculate stats
-        const totalSales = orders
-          .filter(order => order.isPaid)
-          .reduce((sum, order) => sum + order.totalPrice, 0);
-        
-        const totalOrders = orders.length;
-        const totalProducts = products.length;
-        const totalUsers = users.length;
+        // Use stats.totalRevenue (stored in DB)
+        const totalSales = Number(statsData.totalRevenue || 0);
 
-        setStats({ totalSales, totalOrders, totalProducts, totalUsers });
+        // If you also want totalOrders from stats prefer statsData.totalOrders else fallback to orders length
+        const totalOrders = Number(statsData.totalOrders || orders.length || 0);
+        const cancelledOrders = Number(statsData.cancelledOrders || 0);
+
+        setStats({ totalRevenue: totalSales, totalOrders, cancelledOrders });
+        setExtraCounts({ totalProducts: products.length, totalUsers: users.length });
         setRecentOrders(orders);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -95,7 +106,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Total Sales</p>
-                <p className="text-2xl font-bold text-gray-900">₹{stats.totalSales.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-gray-900">₹{Number(stats.totalRevenue || 0).toFixed(2)}</p>
               </div>
             </div>
           </div>
@@ -123,7 +134,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Total Products</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
+                <p className="text-2xl font-bold text-gray-900">{extraCounts.totalProducts}</p>
               </div>
             </div>
           </div>
@@ -137,7 +148,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Total Users</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                <p className="text-2xl font-bold text-gray-900">{extraCounts.totalUsers}</p>
               </div>
             </div>
           </div>
@@ -261,6 +272,15 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* Cancelled orders quick info */}
+        <div className="mt-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 inline-block">
+            <p className="text-sm text-gray-600">Cancelled Orders</p>
+            <p className="text-lg font-semibold text-red-600">{stats.cancelledOrders}</p>
+          </div>
+        </div>
+
       </div>
     </div>
   );
